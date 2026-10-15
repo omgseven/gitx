@@ -1,19 +1,44 @@
 #!/bin/sh
 # One-shot installer for gitx.
 #
-# Makes sure a Python 3.10+ interpreter is available (installing one
-# through Homebrew when needed), creates a private virtualenv next to
-# this script, installs pygit2 into it and drops a `gitx` launcher into
-# ~/.local/bin, so the CLI can be run from any repository without
-# touching the system Python.
+# Two ways to run it:
 #
-# Usage:
+#   # without a repository checkout
+#   curl -fsSL https://raw.githubusercontent.com/omgseven/gitx/main/install.sh | sh
+#
+#   # from a repository checkout
 #   sh install.sh
+#
+# With a gitx.py next to this script that copy is installed in place;
+# without one gitx.py is downloaded into ~/.local/share/gitx first.
+# Either way the installer makes sure a Python 3.10+ interpreter is
+# available (installing one through Homebrew when needed), creates a
+# private virtualenv, installs pygit2 into it and drops a `gitx`
+# launcher into ~/.local/bin.
 #
 # Re-running is safe: existing pieces are detected and kept.
 set -eu
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+if [ -f "$here/gitx.py" ]; then
+    payload="$here/gitx.py"
+else
+    share="${XDG_DATA_HOME:-$HOME/.local/share}/gitx"
+    payload="$share/gitx.py"
+    mkdir -p "$share"
+    tmp="$payload.tmp.$$"
+    raw="https://raw.githubusercontent.com/omgseven/gitx/main/gitx.py"
+    api="https://api.github.com/repos/omgseven/gitx/contents/gitx.py?ref=main"
+    echo "gitx: no local gitx.py found; downloading it from GitHub ..."
+    if ! curl -fsSL "$raw" -o "$tmp" 2>/dev/null \
+            && ! curl -fsSL -H "Accept: application/vnd.github.raw" "$api" -o "$tmp"; then
+        rm -f "$tmp"
+        echo "gitx: could not download gitx.py from GitHub" >&2
+        exit 1
+    fi
+    mv "$tmp" "$payload"
+fi
 
 # print the first interpreter on PATH that runs Python 3.10+
 find_python() {
@@ -47,4 +72,4 @@ if [ -z "$py" ]; then
     exit 1
 fi
 
-exec "$py" "$here/gitx.py" install
+exec "$py" "$payload" install
